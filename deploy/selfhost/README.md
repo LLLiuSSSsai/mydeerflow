@@ -33,9 +33,10 @@ repositories named `deer-flow-backend` and `deer-flow-frontend`. Then set:
 | Secret | `REGISTRY_USERNAME` | ACR username |
 | Secret | `REGISTRY_PASSWORD` | ACR registry password |
 
-For GHCR, leave `IMAGE_PREFIX` unset and make the packages pullable by the
-server. Add `REGISTRY_USERNAME` / `REGISTRY_PASSWORD` only if the default
-`GITHUB_TOKEN` push is not enough.
+For GHCR, leave `IMAGE_PREFIX` unset. The workflow logs the server in with the
+run's `GITHUB_TOKEN`, so private packages need no manual server login. Add
+`REGISTRY_USERNAME` / `REGISTRY_PASSWORD` only when the default token cannot
+publish or pull the packages.
 
 ## One-time server setup
 
@@ -106,6 +107,10 @@ echo '<PAT with read:packages>' | docker login ghcr.io -u <github-user> --passwo
 # Aliyun ACR
 echo '<ACR password>' | docker login registry.cn-hangzhou.aliyuncs.com -u <ACR user> --password-stdin
 ```
+
+The GitHub Actions deploy logs in temporarily with the same registry
+credentials and logs out after the pull. This manual login is only required for
+deploys started outside the workflow.
 
 ### HTTPS
 

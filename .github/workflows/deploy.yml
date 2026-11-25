@@ -81,10 +81,15 @@ jobs:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          REGISTRY: ${{ needs.meta.outputs.registry }}
+          REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME || github.actor }}
+          REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
         run: |
           install -m 700 -d ~/.ssh
           printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
-          ssh -i ~/.ssh/id_ed25519 "$DEPLOY_USER@$DEPLOY_HOST" \
-            "cd /srv/deer-flow && git fetch origin && git reset --hard origin/main && DEER_FLOW_IMAGE_PREFIX='${{ needs.meta.outputs.prefix }}' IMAGE_TAG='sha-${{ github.sha }}' bash deploy/selfhost/deploy.sh"
+          # Keep the registry credential off the command line. The SSH stdin is
+          # consumed only by docker login and the credential is removed on exit.
+          printf '%s\n' "$REGISTRY_PASSWORD" | ssh -i ~/.ssh/id_ed25519 "$DEPLOY_USER@$DEPLOY_HOST" \
+            "set -e; trap 'docker logout ${REGISTRY} >/dev/null 2>&1 || true' EXIT; docker login '${REGISTRY}' --username '${REGISTRY_USERNAME}' --password-stdin; cd /srv/deer-flow && git fetch origin && git reset --hard origin/main && DEER_FLOW_IMAGE_PREFIX='${{ needs.meta.outputs.prefix }}' IMAGE_TAG='sha-${{ github.sha }}' bash deploy/selfhost/deploy.sh"
