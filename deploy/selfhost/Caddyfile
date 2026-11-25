@@ -1,0 +1,14 @@
+# DeerFlow reverse proxy with automatic HTTPS.
+#
+# DEERFLOW_DOMAIN selects the hostname. The default uses sslip.io, which
+# resolves any <prefix>.<ip>.sslip.io name to that IP, so HTTPS works before a
+# custom domain is pointed at the server.
+#
+# Replace the default with your own domain, for example:
+#   DEERFLOW_DOMAIN=deerflow.example.com
+# Then: sudo systemctl reload caddy
+
+{$DEERFLOW_DOMAIN:deerflow.47.98.175.164.sslip.io} {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:2026
+}

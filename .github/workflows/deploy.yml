@@ -1,0 +1,90 @@
+name: Build and Deploy
+
+# Builds the Gateway and frontend images on every push to main, pushes them to
+# the configured registry, then deploys over SSH.
+#
+# Defaults to GHCR. To use Aliyun ACR (recommended for a mainland China server),
+# set the repository variable IMAGE_PREFIX to
+#   registry.cn-hangzhou.aliyuncs.com/<namespace>/deer-flow
+# and the secrets REGISTRY_USERNAME / REGISTRY_PASSWORD.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  meta:
+    runs-on: ubuntu-latest
+    outputs:
+      prefix: ${{ steps.image.outputs.prefix }}
+      registry: ${{ steps.image.outputs.registry }}
+    steps:
+      - name: Resolve image prefix
+        id: image
+        env:
+          RAW_PREFIX: ${{ vars.IMAGE_PREFIX || format('ghcr.io/{0}', github.repository) }}
+        run: |
+          prefix="${RAW_PREFIX,,}"
+          registry="${prefix%%/*}"
+          echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
+          echo "registry=$registry" >> "$GITHUB_OUTPUT"
+
+  images:
+    needs: meta
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - name: backend
+            dockerfile: backend/Dockerfile
+            build_args: |
+              UV_EXTRAS=postgres
+          - name: frontend
+            dockerfile: frontend/Dockerfile
+            build_args: ""
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+      - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+        with:
+          registry: ${{ needs.meta.outputs.registry }}
+          username: ${{ secrets.REGISTRY_USERNAME || github.actor }}
+          password: ${{ secrets.REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          build-args: ${{ matrix.build_args }}
+          tags: |
+            ${{ needs.meta.outputs.prefix }}-${{ matrix.name }}:latest
+            ${{ needs.meta.outputs.prefix }}-${{ matrix.name }}:sha-${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+  deploy:
+    needs: [meta, images]
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Deploy over SSH
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+          ssh -i ~/.ssh/id_ed25519 "$DEPLOY_USER@$DEPLOY_HOST" \
+            "cd /srv/deer-flow && git fetch origin && git reset --hard origin/main && DEER_FLOW_IMAGE_PREFIX='${{ needs.meta.outputs.prefix }}' IMAGE_TAG='sha-${{ github.sha }}' bash deploy/selfhost/deploy.sh"

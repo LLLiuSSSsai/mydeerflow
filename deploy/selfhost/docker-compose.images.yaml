@@ -1,0 +1,17 @@
+# Consume images built by .github/workflows/deploy.yml instead of building on
+# the server. Use together with docker/docker-compose.yaml:
+#
+#   docker compose -f docker/docker-compose.yaml \
+#     -f deploy/selfhost/docker-compose.images.yaml ...
+#
+# DEER_FLOW_IMAGE_PREFIX is the repository prefix, for example
+#   ghcr.io/owner/deer-flow
+#   registry.cn-hangzhou.aliyuncs.com/namespace/deer-flow
+# IMAGE_TAG defaults to latest; the deploy workflow passes sha-<commit> so every
+# release stays pullable for rollback.
+
+services:
+  gateway:
+    image: ${DEER_FLOW_IMAGE_PREFIX:?Set DEER_FLOW_IMAGE_PREFIX}-backend:${IMAGE_TAG:-latest}
+  frontend:
+    image: ${DEER_FLOW_IMAGE_PREFIX:?Set DEER_FLOW_IMAGE_PREFIX}-frontend:${IMAGE_TAG:-latest}
