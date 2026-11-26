@@ -65,6 +65,11 @@ jobs:
           file: ${{ matrix.dockerfile }}
           push: true
           build-args: ${{ matrix.build_args }}
+          # ACR Personal rejects the extra OCI attestation manifests emitted by
+          # BuildKit with "unknown manifest". The deployment target is amd64.
+          platforms: linux/amd64
+          provenance: false
+          sbom: false
           tags: |
             ${{ needs.meta.outputs.prefix }}-${{ matrix.name }}:latest
             ${{ needs.meta.outputs.prefix }}-${{ matrix.name }}:sha-${{ github.sha }}
